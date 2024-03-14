@@ -1,19 +1,13 @@
-use std::net::UdpSocket;
+use clap::{Parser, Subcommand};
 
 const SERVER_ADDR: &str = "127.0.0.1:2048";
 const CLIENT_ADDR: &str = "127.0.0.1:0"; // random port
 
 const MAX_BUF_SZ: usize = 2048;
 
-fn main() -> std::io::Result<()> {
-    let args: Vec<String> = std::env::args().collect();
-    let mut message = "Default message";
-    if args.len() >= 2 {
-        message = &args[1];
-    }
-
+fn run_udp(message: String) -> std::io::Result<()> {
     // Get a client socket to send from on a random UDP port
-    let socket = UdpSocket::bind(CLIENT_ADDR.to_string())?;
+    let socket = std::net::UdpSocket::bind(CLIENT_ADDR.to_string())?;
 
     let message_sz = socket.send_to(message.as_bytes(), SERVER_ADDR)?;
     println!("\nsent echo of {} bytes to server\n", message_sz);
@@ -31,4 +25,47 @@ fn main() -> std::io::Result<()> {
     println!("Echo from: {:?}, size: {:?}\n{}\n", src, amt, echo);
     Ok(())
 }
+#[derive(Subcommand)]
+enum Command {
+    UDP {
+        #[arg(short, long, default_value_t = 2048)]
+        port: usize,
+        #[arg(short, long, default_value = "Default UDP Message")]
+        message: String,
+    },
+    TCP {
+        #[arg(short, long, default_value_t = 2048)]
+        port: usize,
+        #[arg(short, long, default_value  = "Default TCP Message")]
+        message: String,
+    },
+}
 
+#[derive(Parser)]
+#[command(about, version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+fn main() -> std::io::Result<()> {
+    let args = Cli::parse();
+    match args.command {
+        Command::UDP {
+            port,
+            message
+        } => {
+            println!("message is {}", message);
+            println!("port is {}", port);
+            return run_udp(message);
+        }
+        Command::TCP {
+            port,
+            message
+        } => {
+            println!("message is {}", message);
+            println!("port is {}", port);
+        },
+    };
+    Ok(())
+}
