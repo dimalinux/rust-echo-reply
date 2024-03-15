@@ -1,9 +1,10 @@
-use std::net::UdpSocket;
+use std::net::{SocketAddr, UdpSocket};
 use std::str;
+use clap::{Parser, Subcommand};
 
-const LISTEN_ADDR: &str = "127.0.0.1:2048";
+const BIND_ADDR: &str = "127.0.0.1:2048";
 
-fn event_loop(socket:UdpSocket) -> std::io::Result<()> {
+fn event_loop(socket: UdpSocket) -> std::io::Result<()> {
     let mut buf = [0; 2048];
 
     loop {
@@ -26,8 +27,27 @@ fn event_loop(socket:UdpSocket) -> std::io::Result<()> {
 }
 
 
-fn main() -> std::io::Result<()> {
-    let socket = match UdpSocket::bind(LISTEN_ADDR.to_string()) {
+#[derive(Subcommand)]
+enum Command {
+    UDP {
+        #[arg(short, long, default_value = BIND_ADDR)]
+        bind_addr: std::net::SocketAddr,
+    },
+    TCP {
+        #[arg(short, long, default_value = BIND_ADDR)]
+        bind_addr: std::net::SocketAddr,
+    },
+}
+
+#[derive(Parser)]
+#[command(about, version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+fn run_udp(bind_addr: SocketAddr) -> std::io::Result<()> {
+    let socket = match UdpSocket::bind(bind_addr) {
         Ok(result) => result,
         Err(err) => {
             eprintln!("Error binding socket: {}\n", err);
@@ -37,5 +57,23 @@ fn main() -> std::io::Result<()> {
     println!("\nstart server\n");
 
     event_loop(socket)
+}
+
+
+fn main() -> std::io::Result<()> {
+    let args = Cli::parse();
+    match args.command {
+        Command::UDP {
+            bind_addr,
+        } => {
+            return run_udp(bind_addr);
+        }
+        Command::TCP {
+            bind_addr,
+        } => {
+            println!("bind address is {}", bind_addr);
+        }
+    }
+    Ok(())
 }
 
