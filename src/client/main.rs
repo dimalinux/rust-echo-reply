@@ -1,4 +1,6 @@
+use std::io::{BufRead, Write};
 use std::time::Duration;
+
 use clap::{Parser, Subcommand};
 
 const SERVER_ADDR: &str = "127.0.0.1:2048";
@@ -32,6 +34,48 @@ fn run_udp(server_addr: std::net::SocketAddr, message: String) -> std::io::Resul
     };
     let echo = std::str::from_utf8(&buf[..amt]).unwrap();
     println!("Echo from: {:?}, size: {:?}\n{}\n", src, amt, echo);
+    Ok(())
+}
+
+fn run_tcp(server_addr: std::net::SocketAddr, message: String) -> std::io::Result<()> {
+    // Get a client socket to send from on a random UDP port
+    let mut conn = match std::net::TcpStream::connect(server_addr) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Error kind is {}\n", err.kind());
+            eprintln!("Error connecting to {:?}: {}\n", server_addr, err);
+            return Err(err); // Or take some other recovery action
+        },
+    };
+
+    let peer_addr = conn.peer_addr();
+    let unbuf_reader = conn.try_clone()?;
+    let mut reader = std::io::BufReader::new(unbuf_reader);
+
+
+    conn.write_all(message.as_bytes())?;
+    println!("\nsent echo of {:?} bytes to server", message.len());
+
+    let mut line = String::new();
+    conn.set_read_timeout(Some(Duration::from_secs(1)))
+        .expect("Could not set a read timeout");
+
+    match reader.read_line(&mut line) {
+        Ok(result) => result,
+        Err(err) => {
+            if err.kind() == std::io::ErrorKind::WouldBlock {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other, "no response from server")
+                );
+            }
+            // Handle the error here
+            eprintln!("Error kind is {}\n", err.kind());
+            eprintln!("Error receiving data from socket: {}\n", err);
+            return Err(err); // Or take some other recovery action
+        }
+    };
+
+    println!("Echo from: {:?}, size: {:?}\n{}\n", peer_addr, line, line.len());
     Ok(())
 }
 
@@ -75,7 +119,7 @@ fn main() -> std::io::Result<()> {
         } => {
             println!("message is {}", message);
             println!("server address is {}", server_addr);
+            return run_tcp(server_addr, message);
         }
     };
-    Ok(())
 }
