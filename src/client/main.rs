@@ -16,15 +16,17 @@ fn run_udp(server_addr: std::net::SocketAddr, message: String) -> std::io::Resul
     println!("\nsent echo of {} bytes to server\n", message_sz);
 
     let mut buf = [0; MAX_BUF_SZ];
-    socket.set_read_timeout(Some(Duration::from_secs(1)))
+    socket
+        .set_read_timeout(Some(Duration::from_secs(1)))
         .expect("Could not set a read timeout");
     let (amt, src) = match socket.recv_from(&mut buf) {
         Ok(result) => result,
         Err(err) => {
             if err.kind() == std::io::ErrorKind::WouldBlock {
                 return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other, "no response from server")
-                );
+                    std::io::ErrorKind::Other,
+                    "no response from server",
+                ));
             }
             // Handle the error here
             eprintln!("Error kind is {}\n", err.kind());
@@ -45,19 +47,18 @@ fn run_tcp(server_addr: std::net::SocketAddr, message: String) -> std::io::Resul
             eprintln!("Error kind is {}\n", err.kind());
             eprintln!("Error connecting to {:?}: {}\n", server_addr, err);
             return Err(err); // Or take some other recovery action
-        },
+        }
     };
 
     let peer_addr = conn.peer_addr();
     let unbuf_reader = conn.try_clone()?;
     let mut reader = std::io::BufReader::new(unbuf_reader);
 
-
     conn.write_all(message.as_bytes())?;
     println!("\nsent echo of {:?} bytes to server", message.len());
 
     let mut line = String::new();
-    conn.set_read_timeout(Some(Duration::from_secs(1)))
+    conn.set_read_timeout(Some(Duration::from_secs(3)))
         .expect("Could not set a read timeout");
 
     match reader.read_line(&mut line) {
@@ -65,8 +66,9 @@ fn run_tcp(server_addr: std::net::SocketAddr, message: String) -> std::io::Resul
         Err(err) => {
             if err.kind() == std::io::ErrorKind::WouldBlock {
                 return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other, "no response from server")
-                );
+                    std::io::ErrorKind::Other,
+                    "no response from server",
+                ));
             }
             // Handle the error here
             eprintln!("Error kind is {}\n", err.kind());
@@ -75,7 +77,12 @@ fn run_tcp(server_addr: std::net::SocketAddr, message: String) -> std::io::Resul
         }
     };
 
-    println!("Echo from: {:?}, size: {:?}\n{}\n", peer_addr, line, line.len());
+    println!(
+        "Echo from: {:?}, size: {:?}\n{}\n",
+        peer_addr,
+        line,
+        line.len()
+    );
     Ok(())
 }
 
@@ -107,7 +114,7 @@ fn main() -> std::io::Result<()> {
     match args.command {
         Command::UDP {
             server_addr,
-            message
+            message,
         } => {
             println!("message is {}", message);
             println!("server address is {}", server_addr);
@@ -115,7 +122,7 @@ fn main() -> std::io::Result<()> {
         }
         Command::TCP {
             server_addr,
-            message
+            message,
         } => {
             println!("message is {}", message);
             println!("server address is {}", server_addr);
