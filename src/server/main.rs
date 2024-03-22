@@ -29,9 +29,6 @@ fn event_loop_udp(socket: UdpSocket) -> std::io::Result<()> {
 }
 
 fn handle_tcp_client<R: Read, W: Write + Debug>(reader: R, writer: &mut W, peer_name: &String) {
-    //let mut writer = conn; // writer is unbuffered
-    //let mut writer = std::io::BufWriter::new(writer);
-
     // Add read timeout (5 minutes?)
     let mut reader = std::io::BufReader::new(reader);
 
@@ -132,8 +129,11 @@ fn main() -> std::io::Result<()> {
 mod tests {
     use std::io::{BufWriter, Cursor, Read, Write};
     use std::net::{TcpListener, TcpStream};
+    use std::os::fd::{AsFd, AsRawFd};
+    use std::thread;
     use std::time::Duration;
-    use crate::handle_tcp_client;
+
+    use crate::{event_loop_tcp, handle_tcp_client};
 
     #[test]
     fn test_handle_tcp_client() {
@@ -150,7 +150,17 @@ mod tests {
     #[test]
     fn test_event_loop_tcp() {
         let mut socket = TcpListener::bind("127.0.0.1:0").unwrap();
+        let socket_fd = socket.as_fd().as_raw_fd();
         let addr = socket.local_addr().unwrap();
+        let handler = thread::spawn(move || {
+            match event_loop_tcp(&mut socket) {
+                Ok(result) => result,
+                Err(err) => {
+                    panic!("{}", err);
+                }
+            }
+        });
+
         let mut conn = TcpStream::connect(addr).unwrap();
         let input = String::from("test\n");
         conn.write_all("test\n".as_bytes()).unwrap();
@@ -158,6 +168,8 @@ mod tests {
         let mut echo = String::new();
         conn.read_to_string(&mut echo).unwrap();
         assert_eq!(input, echo);
+        drop(conn);
+        nix::unistd::close(socket_fd).unwrap();
+        handler.join().unwrap();
     }
-
 }
