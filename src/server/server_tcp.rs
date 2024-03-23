@@ -86,12 +86,10 @@ mod tests {
         let mut socket = TcpListener::bind("127.0.0.1:0").unwrap();
         let socket_fd = socket.as_fd().as_raw_fd();
         let addr = socket.local_addr().unwrap();
-        let handler = thread::spawn(move || {
-            match event_loop_tcp(&mut socket) {
-                Ok(result) => result,
-                Err(err) => {
-                    panic!("{}", err);
-                }
+        let handler = thread::spawn(move || match event_loop_tcp(&mut socket) {
+            Ok(result) => result,
+            Err(err) => {
+                panic!("{}", err);
             }
         });
 
