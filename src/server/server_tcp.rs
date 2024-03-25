@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 use std::io::{BufRead, Read, Write};
 use std::net::{SocketAddr, TcpListener};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 fn handle_tcp_client<R: Read, W: Write + Debug>(reader: R, writer: &mut W, peer_name: &String) {
     // Add read timeout (5 minutes?)
@@ -33,16 +35,25 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(reader: R, writer: &mut W, peer_
     }
 }
 
-fn event_loop_tcp(listener: &mut TcpListener) -> std::io::Result<()> {
-    loop {
-        let socket = listener.accept()?; // add error handling
+fn event_loop_tcp(listener: &mut TcpListener, shutdown: Arc<AtomicBool>) -> std::io::Result<()> {
+    while !shutdown.load(Ordering::SeqCst) {
+        let mut socket = match listener.accept() {
+            Ok(result) => result,
+            Err(err) => {
+                if shutdown.load(Ordering::SeqCst) {
+                    break;
+                }
+                return Err(err);
+            }
+        };
         let peer_name = socket.0.peer_addr().unwrap().to_string();
         println!("Accepted connection from {:?}", peer_name);
-        let mut writer = socket.0;
-        let reader = writer.try_clone()?;
-        handle_tcp_client(reader, &mut writer, &peer_name);
+        handle_tcp_client(socket.0.try_clone()?, &mut socket.0, &peer_name);
         println!("Terminating connection with {:?}", peer_name);
     }
+
+    // TODO: Print some message here
+    return Ok(());
 }
 
 pub fn run_tcp(bind_addr: SocketAddr) -> std::io::Result<()> {
@@ -53,16 +64,21 @@ pub fn run_tcp(bind_addr: SocketAddr) -> std::io::Result<()> {
             return Err(err); // Or take some other recovery action
         }
     };
+
+    // TODO: Global and have a signal handler change it?
+    let shutdown = Arc::new(AtomicBool::new(false));
     println!("\nstart server\n");
 
-    event_loop_tcp(&mut socket)
+    event_loop_tcp(&mut socket, shutdown.clone())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufWriter, Cursor, Read, Write};
-    use std::net::{TcpListener, TcpStream};
+    use std::io::{BufRead, BufWriter, Cursor, Write};
+    use std::net::{Shutdown, TcpListener, TcpStream};
     use std::os::fd::{AsFd, AsRawFd};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
 
@@ -86,21 +102,25 @@ mod tests {
         let mut socket = TcpListener::bind("127.0.0.1:0").unwrap();
         let socket_fd = socket.as_fd().as_raw_fd();
         let addr = socket.local_addr().unwrap();
-        let handler = thread::spawn(move || match event_loop_tcp(&mut socket) {
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let shutdown2 = shutdown.clone();
+        let handler = thread::spawn(move || match event_loop_tcp(&mut socket, shutdown2) {
             Ok(result) => result,
             Err(err) => {
                 panic!("{}", err);
             }
         });
+        thread::sleep(Duration::from_millis(1000));
 
         let mut conn = TcpStream::connect(addr).unwrap();
         let input = String::from("test\n");
-        conn.write_all("test\n".as_bytes()).unwrap();
-        conn.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+        conn.write_all(input.as_bytes()).unwrap();
+        conn.shutdown(Shutdown::Write).unwrap();
         let mut echo = String::new();
-        conn.read_to_string(&mut echo).unwrap();
+        let mut reader = std::io::BufReader::new(conn);
+        reader.read_line(&mut echo).unwrap();
         assert_eq!(input, echo);
-        drop(conn);
+        shutdown.store(true, Ordering::Relaxed);
         nix::unistd::close(socket_fd).unwrap();
         handler.join().unwrap();
     }
