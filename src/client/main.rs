@@ -1,104 +1,28 @@
-use std::io::{BufRead, Write};
-use std::time::Duration;
-
 use clap::{Parser, Subcommand};
+
+mod client_tcp;
+use client_tcp::run_tcp_client;
+mod client_udp;
+use client_udp::run_udp_client;
 
 const SERVER_ADDR: &str = "127.0.0.1:2048";
 const CLIENT_ADDR: &str = "127.0.0.1:0"; // random port
 
 const MAX_BUF_SZ: usize = 2048;
 
-fn run_udp(server_addr: std::net::SocketAddr, message: String) -> std::io::Result<()> {
-    // Get a client socket to send from on a random UDP port
-    let socket = std::net::UdpSocket::bind(CLIENT_ADDR.to_string())?;
-
-    let message_sz = socket.send_to(message.as_bytes(), server_addr)?;
-    println!("\nsent echo of {} bytes to server\n", message_sz);
-
-    let mut buf = [0; MAX_BUF_SZ];
-    socket
-        .set_read_timeout(Some(Duration::from_secs(1)))
-        .expect("Could not set a read timeout");
-    let (amt, src) = match socket.recv_from(&mut buf) {
-        Ok(result) => result,
-        Err(err) => {
-            if err.kind() == std::io::ErrorKind::WouldBlock {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "no response from server",
-                ));
-            }
-            // Handle the error here
-            eprintln!("Error kind is {}\n", err.kind());
-            eprintln!("Error receiving data from socket: {}\n", err);
-            return Err(err); // Or take some other recovery action
-        }
-    };
-    let echo = std::str::from_utf8(&buf[..amt]).unwrap();
-    println!("Echo from: {:?}, size: {:?}\n{}\n", src, amt, echo);
-    Ok(())
-}
-
-fn run_tcp(server_addr: std::net::SocketAddr, message: String) -> std::io::Result<()> {
-    // Get a client socket to send from on a random UDP port
-    let mut conn = match std::net::TcpStream::connect(server_addr) {
-        Ok(result) => result,
-        Err(err) => {
-            eprintln!("Error kind is {}\n", err.kind());
-            eprintln!("Error connecting to {:?}: {}\n", server_addr, err);
-            return Err(err); // Or take some other recovery action
-        }
-    };
-
-    let peer_addr = conn.peer_addr();
-    let unbuf_reader = conn.try_clone()?;
-    let mut reader = std::io::BufReader::new(unbuf_reader);
-
-    conn.write_all(message.as_bytes())?;
-    println!("\nsent echo of {:?} bytes to server", message.len());
-
-    let mut line = String::new();
-    conn.set_read_timeout(Some(Duration::from_secs(3)))
-        .expect("Could not set a read timeout");
-
-    match reader.read_line(&mut line) {
-        Ok(result) => result,
-        Err(err) => {
-            if err.kind() == std::io::ErrorKind::WouldBlock {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "no response from server",
-                ));
-            }
-            // Handle the error here
-            eprintln!("Error kind is {}\n", err.kind());
-            eprintln!("Error receiving data from socket: {}\n", err);
-            return Err(err); // Or take some other recovery action
-        }
-    };
-
-    println!(
-        "Echo from: {:?}, size: {:?}\n{}\n",
-        peer_addr,
-        line,
-        line.len()
-    );
-    Ok(())
-}
-
 #[derive(Subcommand)]
 enum Command {
     UDP {
         #[arg(short, long, default_value = SERVER_ADDR)]
         server_addr: std::net::SocketAddr,
-        #[arg(short, long, default_value = "Default UDP Message")]
-        message: String,
+        //#[arg(short, long, default_value = "Default UDP Message")]
+        //message: String,
     },
     TCP {
         #[arg(short, long, default_value = SERVER_ADDR)]
         server_addr: std::net::SocketAddr,
-        #[arg(short, long, default_value = "Default TCP Message")]
-        message: String,
+        //#[arg(short, long, default_value = "Default TCP Message")]
+        //message: String,
     },
 }
 
@@ -114,19 +38,16 @@ fn main() -> std::io::Result<()> {
     match args.command {
         Command::UDP {
             server_addr,
-            message,
         } => {
-            println!("message is {}", message);
-            println!("server address is {}", server_addr);
-            return run_udp(server_addr, message);
+            //println!("message is {}", message);
+            //println!("server address is {}", server_addr);
+            return run_udp_client(server_addr, String::from("Default UDP message"));
         }
         Command::TCP {
             server_addr,
-            message,
         } => {
-            println!("message is {}", message);
-            println!("server address is {}", server_addr);
-            return run_tcp(server_addr, message);
+            //println!("server address is {}", server_addr);
+            return run_tcp_client(server_addr);
         }
     };
 }
