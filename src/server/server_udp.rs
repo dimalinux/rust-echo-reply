@@ -5,7 +5,7 @@ fn event_loop_udp(socket: UdpSocket) -> std::io::Result<()> {
     let mut buf = [0; 2048];
 
     loop {
-        let (amt, src) = match socket.recv_from(&mut buf) {
+        let (size, from_addr) = match socket.recv_from(&mut buf) {
             Ok(result) => result,
             Err(err) => {
                 // Handle the error here
@@ -14,15 +14,15 @@ fn event_loop_udp(socket: UdpSocket) -> std::io::Result<()> {
             }
         };
 
-        let message_buf = &buf[0..amt];
+        let message_buf = &buf[0..size];
         let message = str::from_utf8(message_buf).unwrap();
-        println!("From: {:?}, size={} message:\n{:?}", src, amt, message);
-        let amt = socket.send_to(message_buf, src)?;
+        println!("from: {:?} UDP, sz: {} message: {:?}", from_addr, size, message);
+        let amt = socket.send_to(message_buf, from_addr)?;
         println!("sent {} bytes", amt)
     }
 }
 
-pub fn run_udp(bind_addr: SocketAddr) -> std::io::Result<()> {
+pub fn run_udp_server(bind_addr: &SocketAddr) -> std::io::Result<()> {
     let socket = match UdpSocket::bind(bind_addr) {
         Ok(result) => result,
         Err(err) => {
@@ -30,7 +30,8 @@ pub fn run_udp(bind_addr: SocketAddr) -> std::io::Result<()> {
             return Err(err); // Or take some other recovery action
         }
     };
-    println!("\nstart server\n");
+
+    println!("starting UDP server on {}", socket.local_addr()?);
 
     event_loop_udp(socket)
 }

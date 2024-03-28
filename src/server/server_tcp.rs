@@ -4,13 +4,18 @@ use std::net::{SocketAddr, TcpListener};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use threadpool::ThreadPool;
+
+// max number of TCP clients that we will serve simultaneously
+const MAX_TCP_CLIENTS: usize = 100;
+
 fn handle_tcp_client<R: Read, W: Write + Debug>(reader: R, writer: &mut W, peer_name: &String) {
     // Add read timeout (5 minutes?)
     let mut reader = std::io::BufReader::new(reader);
 
     loop {
         let mut line = String::new();
-        let len = match reader.read_line(&mut line) {
+        let size = match reader.read_line(&mut line) {
             Ok(0) => {
                 println!("Client {} closed connection", peer_name);
                 break;
@@ -23,10 +28,9 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(reader: R, writer: &mut W, peer_
             }
         };
 
-        println!("From: {}, str-size={} byte-size={} read-ln-size={} ends-with-newline={} message:\n{:?}", peer_name,
-                 line.len(), line.as_bytes().len(), len, line.ends_with("\n"), line);
+        println!("from: {:?} TCP, sz: {} message: {:?}", peer_name, size, line);
         if !line.ends_with("\n") {
-            println!("Adding newline to echo");
+            println!("\nAdding newline to echo");
             line.push_str("\n");
         }
         writer.write_all(line.as_bytes()).unwrap(); // todo: add error handling
@@ -35,11 +39,18 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(reader: R, writer: &mut W, peer_
     }
 }
 
-fn event_loop_tcp(listener: &mut TcpListener, shutdown: Arc<AtomicBool>) -> std::io::Result<()> {
+fn handle_tcp_client_connections(
+    listener: &mut TcpListener,
+    shutdown: Arc<AtomicBool>,
+) -> std::io::Result<()> {
+    let pool = ThreadPool::new(MAX_TCP_CLIENTS);
+
     while !shutdown.load(Ordering::SeqCst) {
         let mut socket = match listener.accept() {
             Ok(result) => result,
             Err(err) => {
+                // If we've already been requested to shutdown, the error unblocking
+                // the listener was desired behavior, so we don't propagate it.
                 if shutdown.load(Ordering::SeqCst) {
                     break;
                 }
@@ -48,15 +59,16 @@ fn event_loop_tcp(listener: &mut TcpListener, shutdown: Arc<AtomicBool>) -> std:
         };
         let peer_name = socket.0.peer_addr().unwrap().to_string();
         println!("Accepted connection from {:?}", peer_name);
-        handle_tcp_client(socket.0.try_clone()?, &mut socket.0, &peer_name);
-        println!("Terminating connection with {:?}", peer_name);
+        pool.execute(move || {
+            handle_tcp_client(socket.0.try_clone().unwrap(), &mut socket.0, &peer_name);
+            println!("Terminating connection with {}", peer_name);
+        });
     }
 
-    // TODO: Print some message here
     return Ok(());
 }
 
-pub fn run_tcp(bind_addr: SocketAddr) -> std::io::Result<()> {
+pub fn run_tcp_server(bind_addr: &SocketAddr) -> std::io::Result<()> {
     let mut socket = match TcpListener::bind(bind_addr) {
         Ok(result) => result,
         Err(err) => {
@@ -67,9 +79,9 @@ pub fn run_tcp(bind_addr: SocketAddr) -> std::io::Result<()> {
 
     // TODO: Global and have a signal handler change it?
     let shutdown = Arc::new(AtomicBool::new(false));
-    println!("\nstart server\n");
+    println!("starting UDP server on {}", socket.local_addr()?);
 
-    event_loop_tcp(&mut socket, shutdown.clone())
+    handle_tcp_client_connections(&mut socket, shutdown.clone())
 }
 
 #[cfg(test)]
@@ -82,8 +94,8 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use crate::server_tcp::event_loop_tcp;
     use crate::server_tcp::handle_tcp_client;
+    use crate::server_tcp::handle_tcp_client_connections;
 
     #[test]
     fn test_handle_tcp_client() {
@@ -92,7 +104,6 @@ mod tests {
         let mut writer = BufWriter::new(Vec::new());
         let peer_name = String::from("127.0.0.1:1024");
         handle_tcp_client(reader, &mut writer, &peer_name);
-        println!("XXX {:?} XXX", writer);
         let output = String::from_utf8(writer.into_inner().unwrap()).unwrap();
         assert_eq!(input, output);
     }
@@ -104,12 +115,15 @@ mod tests {
         let addr = socket.local_addr().unwrap();
         let shutdown = Arc::new(AtomicBool::new(false));
         let shutdown2 = shutdown.clone();
-        let handler = thread::spawn(move || match event_loop_tcp(&mut socket, shutdown2) {
-            Ok(result) => result,
-            Err(err) => {
-                panic!("{}", err);
-            }
-        });
+        let handler =
+            thread::spawn(
+                move || match handle_tcp_client_connections(&mut socket, shutdown2) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        panic!("{}", err);
+                    }
+                },
+            );
         thread::sleep(Duration::from_millis(1000));
 
         let mut conn = TcpStream::connect(addr).unwrap();

@@ -17,3 +17,4 @@ path = "src/client/main.rs"
 [dependencies]
 clap = { version = "4.5.2", features = ["derive", "string"] }
 nix = "0.28.0"
+threadpool = "1.8.1"

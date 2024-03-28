@@ -14,7 +14,7 @@ fn tcp_client_loop(
             break;
         }
         if !line.ends_with("\n") {
-            println!("Adding newline to echo");
+            println!("\nAdding newline to echo");
             line.push_str("\n");
         }
 
@@ -39,7 +39,7 @@ fn tcp_client_loop(
         };
 
         if !line.ends_with("\n") {
-            println!("Adding newline to echo");
+            println!("\nAdding newline to echo");
             line.push_str("\n");
         }
 
@@ -65,5 +65,11 @@ pub fn run_tcp_client(server_addr: std::net::SocketAddr) -> io::Result<()> {
     let mut reader = io::BufReader::new(unbuf_reader);
 
     println!("Connected to {}", peer_addr);
-    tcp_client_loop(&mut io::stdin().lock(), &mut io::stdout(), &mut reader, &mut conn)
+    println!("Enter text, newlines separate echo messages, control-d to quit.");
+    tcp_client_loop(
+        &mut io::stdin().lock(),
+        &mut io::stdout(),
+        &mut reader,
+        &mut conn,
+    )
 }

@@ -15,14 +15,10 @@ enum Command {
     UDP {
         #[arg(short, long, default_value = SERVER_ADDR)]
         server_addr: std::net::SocketAddr,
-        //#[arg(short, long, default_value = "Default UDP Message")]
-        //message: String,
     },
     TCP {
         #[arg(short, long, default_value = SERVER_ADDR)]
         server_addr: std::net::SocketAddr,
-        //#[arg(short, long, default_value = "Default TCP Message")]
-        //message: String,
     },
 }
 
@@ -36,17 +32,10 @@ struct Cli {
 fn main() -> std::io::Result<()> {
     let args = Cli::parse();
     match args.command {
-        Command::UDP {
-            server_addr,
-        } => {
-            //println!("message is {}", message);
-            //println!("server address is {}", server_addr);
-            return run_udp_client(server_addr, String::from("Default UDP message"));
+        Command::UDP { server_addr } => {
+            return run_udp_client(server_addr);
         }
-        Command::TCP {
-            server_addr,
-        } => {
-            //println!("server address is {}", server_addr);
+        Command::TCP { server_addr } => {
             return run_tcp_client(server_addr);
         }
     };
