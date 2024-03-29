@@ -12,11 +12,11 @@ const MAX_BUF_SZ: usize = 2048;
 
 #[derive(Subcommand)]
 enum Command {
-    UDP {
+    Udp {
         #[arg(short, long, default_value = SERVER_ADDR)]
         server_addr: std::net::SocketAddr,
     },
-    TCP {
+    Tcp {
         #[arg(short, long, default_value = SERVER_ADDR)]
         server_addr: std::net::SocketAddr,
     },
@@ -32,11 +32,11 @@ struct Cli {
 fn main() -> std::io::Result<()> {
     let args = Cli::parse();
     match args.command {
-        Command::UDP { server_addr } => {
-            return run_udp_client(server_addr);
+        Command::Udp { server_addr } => {
+            run_udp_client(server_addr)
         }
-        Command::TCP { server_addr } => {
-            return run_tcp_client(server_addr);
+        Command::Tcp { server_addr } => {
+            run_tcp_client(server_addr)
         }
-    };
+    }
 }

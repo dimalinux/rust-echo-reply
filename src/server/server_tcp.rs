@@ -32,9 +32,9 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(reader: R, writer: &mut W, peer_
             "from: {:?} TCP, sz: {} message: {:?}",
             peer_name, size, line
         );
-        if !line.ends_with("\n") {
+        if !line.ends_with('\n') {
             println!("\nAdding newline to echo");
-            line.push_str("\n");
+            line.push('\n');
         }
         writer.write_all(line.as_bytes()).unwrap(); // todo: add error handling
         writer.flush().unwrap();
@@ -68,7 +68,7 @@ fn handle_tcp_client_connections(
         });
     }
 
-    return Ok(());
+    Ok(())
 }
 
 pub fn run_tcp_server(bind_addr: &SocketAddr) -> std::io::Result<()> {

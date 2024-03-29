@@ -13,15 +13,15 @@ const BIND_ADDR: &str = "127.0.0.1:2048";
 
 #[derive(Subcommand)]
 enum Command {
-    UDP {
+    Udp {
         #[arg(short, long, default_value = BIND_ADDR)]
         bind_addr: std::net::SocketAddr,
     },
-    TCP {
+    Tcp {
         #[arg(short, long, default_value = BIND_ADDR)]
         bind_addr: std::net::SocketAddr,
     },
-    BOTH {
+    Both {
         #[arg(short, long, default_value = BIND_ADDR)]
         bind_addr: std::net::SocketAddr,
     },
@@ -46,10 +46,10 @@ fn run_both_servers(bind_addr: &SocketAddr) -> std::io::Result<()> {
 
 fn main() -> std::io::Result<()> {
     let args = Cli::parse();
-    return match args.command {
-        Some(Command::UDP { bind_addr }) => run_udp_server(&bind_addr),
-        Some(Command::TCP { bind_addr }) => run_tcp_server(&bind_addr),
-        Some(Command::BOTH { bind_addr }) => run_both_servers(&bind_addr),
+    match args.command {
+        Some(Command::Udp { bind_addr }) => run_udp_server(&bind_addr),
+        Some(Command::Tcp { bind_addr }) => run_tcp_server(&bind_addr),
+        Some(Command::Both { bind_addr }) => run_both_servers(&bind_addr),
         None => run_both_servers(&BIND_ADDR.parse().unwrap()),
-    };
+    }
 }

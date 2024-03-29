@@ -13,9 +13,9 @@ fn tcp_client_loop(
         if n == 0 {
             break;
         }
-        if !line.ends_with("\n") {
+        if !line.ends_with('\n') {
             println!("\nAdding newline to echo");
-            line.push_str("\n");
+            line.push('\n');
         }
 
         server_write.write_all(line.as_bytes())?;
@@ -38,9 +38,9 @@ fn tcp_client_loop(
             }
         };
 
-        if !line.ends_with("\n") {
+        if !line.ends_with('\n') {
             println!("\nAdding newline to echo");
-            line.push_str("\n");
+            line.push('\n');
         }
 
         cli_output.write_all(format!("ECHO: {}", line).as_bytes())?;

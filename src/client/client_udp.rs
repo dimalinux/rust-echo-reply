@@ -21,9 +21,9 @@ fn udp_client_loop(
             break;
         }
 
-        if !message.ends_with("\n") {
+        if !message.ends_with('\n') {
             println!("\nAdding newline to outbound echo");
-            message.push_str("\n");
+            message.push('\n');
         }
 
         let _ = client_sock.send_to(message.as_bytes(), server_addr)?;
@@ -47,7 +47,7 @@ fn udp_client_loop(
             }
         };
         let mut echo = String::from_utf8_lossy(&buf[..echo_size]).to_string();
-        if !echo.ends_with("\n") {
+        if !echo.ends_with('\n') {
             echo.push_str("\nNEWLINE ADDED\n");
         }
 
