@@ -64,7 +64,7 @@ pub fn run_tcp_client(server_addr: std::net::SocketAddr) -> io::Result<()> {
     let unbuf_reader = conn.try_clone()?;
     let mut reader = io::BufReader::new(unbuf_reader);
 
-    println!("Connected to {}", peer_addr);
+    println!("Connected to {} TCP", peer_addr);
     println!("Enter text, newlines separate echo messages, control-d to quit.");
     tcp_client_loop(
         &mut io::stdin().lock(),

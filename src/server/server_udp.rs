@@ -16,7 +16,10 @@ fn event_loop_udp(socket: UdpSocket) -> std::io::Result<()> {
 
         let message_buf = &buf[0..size];
         let message = str::from_utf8(message_buf).unwrap();
-        println!("from: {:?} UDP, sz: {} message: {:?}", from_addr, size, message);
+        println!(
+            "from: {:?} UDP, sz: {} message: {:?}",
+            from_addr, size, message
+        );
         let amt = socket.send_to(message_buf, from_addr)?;
         println!("sent {} bytes", amt)
     }

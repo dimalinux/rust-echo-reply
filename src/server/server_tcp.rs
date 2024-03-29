@@ -28,7 +28,10 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(reader: R, writer: &mut W, peer_
             }
         };
 
-        println!("from: {:?} TCP, sz: {} message: {:?}", peer_name, size, line);
+        println!(
+            "from: {:?} TCP, sz: {} message: {:?}",
+            peer_name, size, line
+        );
         if !line.ends_with("\n") {
             println!("\nAdding newline to echo");
             line.push_str("\n");

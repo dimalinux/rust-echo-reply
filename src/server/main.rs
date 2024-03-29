@@ -36,9 +36,7 @@ struct Cli {
 
 fn run_both_servers(bind_addr: &SocketAddr) -> std::io::Result<()> {
     let bind_addr_clone = bind_addr.clone();
-    let udp_thread = thread::spawn(move||{
-        run_udp_server(&bind_addr_clone)
-    });
+    let udp_thread = thread::spawn(move || run_udp_server(&bind_addr_clone));
 
     run_tcp_server(bind_addr)?;
 
