@@ -18,3 +18,5 @@ path = "src/client/main.rs"
 clap = { version = "4.5.2", features = ["derive", "string"] }
 nix = "0.28.0"
 threadpool = "1.8.1"
+log = "0.4.21"
+env_logger = "0.11.3"

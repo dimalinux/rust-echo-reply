@@ -1,10 +1,9 @@
-use std::net::SocketAddr;
-use std::{str, thread};
-
-use clap::{Parser, Subcommand};
-
 use crate::server_tcp::run_tcp_server;
 use crate::server_udp::run_udp_server;
+use clap::{Parser, Subcommand};
+use log::LevelFilter;
+use std::net::SocketAddr;
+use std::{env, str, thread};
 
 mod server_tcp;
 mod server_udp;
@@ -35,7 +34,7 @@ struct Cli {
 }
 
 fn run_both_servers(bind_addr: &SocketAddr) -> std::io::Result<()> {
-    let bind_addr_clone = bind_addr.clone();
+    let bind_addr_clone = *bind_addr;
     let udp_thread = thread::spawn(move || run_udp_server(&bind_addr_clone));
 
     run_tcp_server(bind_addr)?;
@@ -44,7 +43,19 @@ fn run_both_servers(bind_addr: &SocketAddr) -> std::io::Result<()> {
     Ok(())
 }
 
+fn init_logging() {
+    if env::var(env_logger::DEFAULT_FILTER_ENV).is_err() {
+        env::set_var(
+            env_logger::DEFAULT_FILTER_ENV,
+            LevelFilter::Trace.to_string(),
+        );
+    }
+    env_logger::init();
+}
+
 fn main() -> std::io::Result<()> {
+    init_logging();
+
     let args = Cli::parse();
     match args.command {
         Some(Command::Udp { bind_addr }) => run_udp_server(&bind_addr),
