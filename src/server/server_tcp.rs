@@ -1,9 +1,10 @@
-use log::{debug, error, info, warn};
 use std::fmt::Debug;
 use std::io::{BufRead, Read, Write};
 use std::net::{SocketAddr, TcpListener};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+
+use log::{debug, error, info, warn};
 use threadpool::ThreadPool;
 
 // max number of TCP clients that we will serve simultaneously
@@ -33,8 +34,8 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(
             debug!("\nAdding newline to echo");
             line.push('\n');
         }
-        writer.write_all(line.as_bytes()).unwrap(); // todo: add error handling
-        writer.flush().unwrap();
+        writer.write_all(line.as_bytes())?;
+        writer.flush()?;
         info!("sent {} bytes\n{:?}", line.len(), writer);
     }
 }
@@ -159,6 +160,20 @@ mod tests {
         // server thread is blocked on an accept(), unblock it so the thread can be joined
         let _ = TcpStream::connect(addr).unwrap();
         handler.join().unwrap();
+    }
+
+    #[test]
+    fn test_handle_tcp_client_connections_accept_error_propagated() {
+        let mut socket = TcpListener::bind("127.0.0.1:0").unwrap();
+        // accept on the socket will immediately error with EWOULDBLOCK
+        socket.set_nonblocking(true).unwrap();
+
+        // ensure that the accept error is propagated, as we haven't set the shutdown flag
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let err = handle_tcp_client_connections(&mut socket, shutdown)
+            .err()
+            .unwrap();
+        assert_eq!(err.kind(), std::io::ErrorKind::WouldBlock);
     }
 
     #[test]
