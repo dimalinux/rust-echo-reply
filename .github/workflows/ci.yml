@@ -14,10 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify that code was formatted
-        run: cargo fmt --all -- --check
       - name: Build
         run: cargo build --verbose
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Lint
+        run: cargo clippy --all-targets --all-features
       - name: Run tests
         run: cargo test --verbose
       - name: Generate test coverage data
