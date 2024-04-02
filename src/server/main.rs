@@ -1,9 +1,13 @@
-use crate::server_tcp::run_tcp_server;
-use crate::server_udp::run_udp_server;
+use std::net::SocketAddr;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::{env, str, thread};
+
 use clap::{Parser, Subcommand};
 use log::LevelFilter;
-use std::net::SocketAddr;
-use std::{env, str, thread};
+
+use crate::server_tcp::run_tcp_server;
+use crate::server_udp::run_udp_server;
 
 mod server_tcp;
 mod server_udp;
@@ -33,11 +37,11 @@ struct Cli {
     command: Option<Command>,
 }
 
-fn run_both_servers(bind_addr: &SocketAddr) -> std::io::Result<()> {
+fn run_both_servers(bind_addr: &SocketAddr, shutdown: Arc<AtomicBool>) -> std::io::Result<()> {
     let bind_addr_clone = *bind_addr;
     let udp_thread = thread::spawn(move || run_udp_server(&bind_addr_clone));
 
-    run_tcp_server(bind_addr)?;
+    run_tcp_server(bind_addr, shutdown)?;
 
     udp_thread.join().unwrap()?;
     Ok(())
@@ -54,13 +58,15 @@ fn init_logging() {
 }
 
 fn main() -> std::io::Result<()> {
+    let shutdown = Arc::new(AtomicBool::new(false));
+
     init_logging();
 
     let args = Cli::parse();
     match args.command {
         Some(Command::Udp { bind_addr }) => run_udp_server(&bind_addr),
-        Some(Command::Tcp { bind_addr }) => run_tcp_server(&bind_addr),
-        Some(Command::Both { bind_addr }) => run_both_servers(&bind_addr),
-        None => run_both_servers(&BIND_ADDR.parse().unwrap()),
+        Some(Command::Tcp { bind_addr }) => run_tcp_server(&bind_addr, shutdown.clone()),
+        Some(Command::Both { bind_addr }) => run_both_servers(&bind_addr, shutdown.clone()),
+        None => run_both_servers(&BIND_ADDR.parse().unwrap(), shutdown.clone()),
     }
 }
