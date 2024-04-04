@@ -1,3 +1,4 @@
+use std::io::Result;
 use std::net::SocketAddr;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -37,9 +38,10 @@ struct Cli {
     command: Option<Command>,
 }
 
-fn run_both_servers(bind_addr: &SocketAddr, shutdown: Arc<AtomicBool>) -> std::io::Result<()> {
+fn run_both_servers(bind_addr: &SocketAddr, shutdown: Arc<AtomicBool>) -> Result<()> {
     let bind_addr_clone = *bind_addr;
-    let udp_thread = thread::spawn(move || run_udp_server(&bind_addr_clone));
+    let shutdown_clone = shutdown.clone();
+    let udp_thread = thread::spawn(move || run_udp_server(&bind_addr_clone, shutdown_clone));
 
     run_tcp_server(bind_addr, shutdown)?;
 
@@ -57,14 +59,14 @@ fn init_logging() {
     env_logger::init();
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> Result<()> {
     let shutdown = Arc::new(AtomicBool::new(false));
 
     init_logging();
 
     let args = Cli::parse();
     match args.command {
-        Some(Command::Udp { bind_addr }) => run_udp_server(&bind_addr),
+        Some(Command::Udp { bind_addr }) => run_udp_server(&bind_addr, shutdown.clone()),
         Some(Command::Tcp { bind_addr }) => run_tcp_server(&bind_addr, shutdown.clone()),
         Some(Command::Both { bind_addr }) => run_both_servers(&bind_addr, shutdown.clone()),
         None => run_both_servers(&BIND_ADDR.parse().unwrap(), shutdown.clone()),

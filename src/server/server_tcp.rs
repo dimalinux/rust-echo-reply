@@ -51,7 +51,7 @@ fn handle_tcp_client_connections(
             Ok(result) => result,
             Err(err) => {
                 // If we've already been requested to shut down, the error unblocking
-                // the listener was desired behavior, so we don't propagate it.
+                // the listener was desired behavior.
                 if shutdown.load(Ordering::SeqCst) {
                     break;
                 }
@@ -108,6 +108,10 @@ mod tests {
         init_logging();
     }
 
+    /// Returns a localhost SocketAddr on a free TCP port. OSes won't
+    /// immediately recycle port numbers for security reasons when requesting an
+    /// OS assigned port, so it's a safe-enough way to get a free port even when
+    /// running unit tests in parallel.
     fn get_free_tcp_addr() -> SocketAddr {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         listener.local_addr().unwrap()
