@@ -1,11 +1,12 @@
 use std::fmt::Debug;
 use std::io::{BufRead, Read, Write};
-use std::net::{SocketAddr, TcpListener};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::net::SocketAddr;
 
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use threadpool::ThreadPool;
+use tokio::net::TcpListener;
+use tokio::select;
+use tokio_util::sync::CancellationToken;
 
 // max number of TCP clients that we will serve simultaneously
 const MAX_TCP_CLIENTS: usize = 100;
@@ -40,68 +41,71 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(
     }
 }
 
-fn handle_tcp_client_connections(
+async fn handle_tcp_client_connections(
     listener: &mut TcpListener,
-    shutdown: Arc<AtomicBool>,
+    run_state: CancellationToken,
 ) -> std::io::Result<()> {
     let pool = ThreadPool::new(MAX_TCP_CLIENTS);
 
-    while !shutdown.load(Ordering::SeqCst) {
-        let mut socket = match listener.accept() {
-            Ok(result) => result,
-            Err(err) => {
-                // If we've already been requested to shut down, the error unblocking
-                // the listener was desired behavior.
-                if shutdown.load(Ordering::SeqCst) {
-                    break;
-                }
-                return Err(err);
-            }
+    loop {
+        let accept_result = select! {
+            biased;
+            _ = run_state.cancelled() => {
+                info!("Shutting down TCP server");
+                pool.join();
+                return Ok(());
+            },
+            result = listener.accept() => result,
         };
-        let peer_name = socket.0.peer_addr().unwrap().to_string();
-        info!("Accepted connection from {:?}", peer_name);
-        pool.execute(move || {
-            match handle_tcp_client(socket.0.try_clone().unwrap(), &mut socket.0, &peer_name) {
-                Ok(_) => {
-                    info!("Closed connection with {}", peer_name);
-                }
-                Err(err) => {
-                    warn!("Closed connection with {} on error: {}", peer_name, err)
-                }
-            }
-        });
-    }
 
-    pool.join();
-    Ok(())
+        match accept_result {
+            Ok((socket, peer)) => {
+                let peer_name = peer.to_string();
+                info!("Accepted connection from {}", peer);
+                pool.execute(move || {
+                    // TODO: look into removing the unwrap calls
+                    let mut socket = socket.into_std().unwrap();
+                    socket.set_nonblocking(false).unwrap();
+                    match handle_tcp_client(socket.try_clone().unwrap(), &mut socket, &peer_name) {
+                        Ok(_) => {
+                            info!("Closed connection with {}", peer_name);
+                        }
+                        Err(err) => {
+                            warn!("Closed connection with {} on error: {}", peer_name, err)
+                        }
+                    }
+                });
+            }
+            Err(e) => {
+                warn!("client accept error: {}", e)
+            }
+        }
+    }
 }
 
-pub fn run_tcp_server(bind_addr: &SocketAddr, shutdown: Arc<AtomicBool>) -> std::io::Result<()> {
-    let mut socket = match TcpListener::bind(bind_addr) {
-        Ok(result) => result,
-        Err(err) => {
-            error!("Error binding socket: {}\n", err);
-            return Err(err); // Or take some other recovery action
-        }
-    };
-
+pub async fn run_tcp_server(
+    bind_addr: &SocketAddr,
+    run_state: CancellationToken,
+) -> std::io::Result<()> {
+    let mut socket = TcpListener::bind(bind_addr).await?;
     info!("starting UDP server on {}", socket.local_addr()?);
-
-    handle_tcp_client_connections(&mut socket, shutdown.clone())
+    handle_tcp_client_connections(&mut socket, run_state).await
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io::{BufRead, BufWriter, Cursor, Write};
+    use std::net;
+    use std::net::{Shutdown, SocketAddr};
+    use std::string::String;
+    use std::time::Duration;
+
+    use tokio::net::{TcpListener, TcpStream};
+    use tokio_util::sync::CancellationToken;
+
     use crate::init_logging;
     use crate::server_tcp::handle_tcp_client_connections;
     use crate::server_tcp::{handle_tcp_client, run_tcp_server};
-    use std::io::{BufRead, BufWriter, Cursor, Write};
-    use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
-    use std::string::String;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
-    use std::thread;
-    use std::time::Duration;
 
     #[ctor::ctor]
     fn init() {
@@ -113,12 +117,12 @@ mod tests {
     /// OS assigned port, so it's a safe-enough way to get a free port even when
     /// running unit tests in parallel.
     fn get_free_tcp_addr() -> SocketAddr {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
         listener.local_addr().unwrap()
     }
 
-    #[test]
-    fn test_handle_tcp_client() {
+    #[tokio::test]
+    async fn test_handle_tcp_client() {
         let input = "line1\nline2";
         let reader = Cursor::new(input.as_bytes().to_vec());
         let mut writer = BufWriter::new(Vec::new());
@@ -129,8 +133,8 @@ mod tests {
         assert_eq!(expected_output, output);
     }
 
-    #[test]
-    fn test_handle_tcp_client_non_utf8_input() {
+    #[tokio::test]
+    async fn test_handle_tcp_client_non_utf8_input() {
         let invalid_utf8: &[u8] = &[0xC0, 0x80];
         let reader = Cursor::new(invalid_utf8);
         let mut writer = BufWriter::new(Vec::new());
@@ -141,69 +145,71 @@ mod tests {
         assert_eq!("", output);
     }
 
-    #[test]
-    fn test_handle_tcp_client_connections() {
-        let mut socket = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = socket.local_addr().unwrap();
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let shutdown_clone = shutdown.clone();
-        let handler = thread::spawn(move || {
-            handle_tcp_client_connections(&mut socket, shutdown_clone).unwrap()
+    #[tokio::test]
+    async fn test_handle_tcp_client_connections() {
+        let mut listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let run_state = CancellationToken::new();
+        let run_state_clone = run_state.clone();
+        let handler = tokio::spawn(async move {
+            handle_tcp_client_connections(&mut listener, run_state_clone)
+                .await
+                .unwrap();
         });
-        thread::sleep(Duration::from_millis(1000));
+        tokio::time::sleep(Duration::from_millis(1000)).await;
 
-        let mut conn = TcpStream::connect(addr).unwrap();
+        let conn = TcpStream::connect(addr).await.unwrap();
+        let mut raw_conn = conn.into_std().unwrap();
+        raw_conn.set_nonblocking(false).unwrap();
         let input = String::from("test\n");
-        conn.write_all(input.as_bytes()).unwrap();
-        conn.shutdown(Shutdown::Write).unwrap();
-        let mut echo = String::new();
-        let mut reader = std::io::BufReader::new(conn);
-        reader.read_line(&mut echo).unwrap();
-        assert_eq!(input, echo);
-        shutdown.store(true, Ordering::Relaxed);
-        // server thread is blocked on an accept(), unblock it so the thread can be joined
-        let _ = TcpStream::connect(addr).unwrap();
-        handler.join().unwrap();
+        raw_conn.write_all(input.as_bytes()).unwrap();
+        raw_conn.shutdown(Shutdown::Write).unwrap();
+        let mut reader = std::io::BufReader::new(raw_conn);
+        tokio::task::spawn_blocking(move || {
+            let mut echo = String::new();
+            reader.read_line(&mut echo).unwrap();
+            assert_eq!(input, echo);
+        })
+        .await
+        .unwrap();
+        run_state.cancel();
+        handler.await.unwrap();
     }
 
-    #[test]
-    fn test_handle_tcp_client_connections_accept_error_propagated() {
-        let mut socket = TcpListener::bind("127.0.0.1:0").unwrap();
-        // accept on the socket will immediately error with EWOULDBLOCK
-        socket.set_nonblocking(true).unwrap();
-
-        // ensure that the accept error is propagated, as we haven't set the shutdown flag
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let err = handle_tcp_client_connections(&mut socket, shutdown)
-            .err()
+    #[tokio::test]
+    async fn test_handle_tcp_client_connections_server_start_cancelled() {
+        let mut socket = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let run_state = CancellationToken::new();
+        run_state.cancel();
+        // call below should immediately return with no error
+        handle_tcp_client_connections(&mut socket, run_state)
+            .await
             .unwrap();
-        assert_eq!(err.kind(), std::io::ErrorKind::WouldBlock);
     }
 
-    #[test]
-    fn test_run_tcp_server() {
+    #[tokio::test]
+    async fn test_run_tcp_server() {
         let server_addr = get_free_tcp_addr();
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let shutdown_clone = shutdown.clone();
-        let tcp_thread = thread::spawn(move || {
-            run_tcp_server(&server_addr, shutdown_clone).unwrap();
+        let run_state = CancellationToken::new();
+        let run_state_clone = run_state.clone();
+        let tcp_server_task = tokio::spawn(async move {
+            run_tcp_server(&server_addr, run_state_clone).await.unwrap();
         });
-        // let the server start
-        thread::sleep(Duration::from_millis(1000));
-        shutdown.store(true, Ordering::Relaxed);
-        // server thread is blocked on an accept(), unblock it so the thread can be joined
-        let _ = TcpStream::connect(server_addr).unwrap();
 
-        tcp_thread.join().unwrap();
+        // let the server start
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        run_state.cancel();
+
+        tcp_server_task.await.unwrap();
     }
 
-    #[test]
-    fn test_run_tcp_server_port_in_use() {
+    #[tokio::test]
+    async fn test_run_tcp_server_port_in_use() {
         // Occupy a random port and then pass its address to run_tcp_server
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let server_addr = listener.local_addr().unwrap();
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let err = run_tcp_server(&server_addr, shutdown).err().unwrap();
+        let run_state = CancellationToken::new();
+        let err = run_tcp_server(&server_addr, run_state).await.err().unwrap();
         assert_eq!(err.kind(), std::io::ErrorKind::AddrInUse);
     }
 }
