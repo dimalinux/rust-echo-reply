@@ -3,16 +3,16 @@ use std::net::SocketAddr;
 use std::{env, str};
 
 use clap::{Parser, Subcommand};
-use log::{info, LevelFilter};
-use tokio::select;
-use tokio::signal::unix::{signal, SignalKind};
+use log::LevelFilter;
 use tokio_util::sync::CancellationToken;
 
 use crate::server_tcp::run_tcp_server;
 use crate::server_udp::run_udp_server;
+use crate::signal_handler::run_signal_handler;
 
 mod server_tcp;
 mod server_udp;
+mod signal_handler;
 
 const BIND_ADDR: &str = "127.0.0.1:2048";
 
@@ -60,36 +60,6 @@ fn init_logging() {
     env_logger::init();
 }
 
-fn run_signal_handler() -> CancellationToken {
-    let run_state = CancellationToken::new();
-    let run_state_clone = run_state.clone();
-
-    let mut sigterm = signal(SignalKind::terminate()).unwrap();
-    let mut sigint = signal(SignalKind::interrupt()).unwrap();
-    let mut sighup = signal(SignalKind::hangup()).unwrap();
-
-    tokio::spawn(async move {
-        loop {
-            select! {
-                biased;
-                _ = sigterm.recv() => {
-                    run_state.cancel();
-                    break;
-                },
-                _ = sigint.recv() => {
-                    run_state.cancel();
-                    break;
-                },
-                _ = sighup.recv() => {
-                    info!("Ignoring SIGHUP");
-                }
-            }
-        }
-    });
-
-    run_state_clone.clone()
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     init_logging();
@@ -101,5 +71,28 @@ async fn main() -> Result<()> {
         Some(Command::Tcp { bind_addr }) => run_tcp_server(&bind_addr, run_state).await,
         Some(Command::Both { bind_addr }) => run_both_servers(&bind_addr, run_state).await,
         None => run_both_servers(&BIND_ADDR.parse().unwrap(), run_state).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio_util::sync::CancellationToken;
+
+    use crate::run_both_servers;
+
+    #[tokio::test]
+    async fn test_both_servers() {
+        let run_state = CancellationToken::new();
+        let run_state_clone = run_state.clone();
+        // Cancel the servers after a second
+        let handle = tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            run_state_clone.cancel();
+        });
+        run_both_servers(&"127.0.0.1:0".parse().unwrap(), run_state)
+            .await
+            .unwrap();
+
+        handle.await.unwrap();
     }
 }
