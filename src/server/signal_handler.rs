@@ -36,6 +36,8 @@ pub fn run_signal_handler() -> CancellationToken {
 
 #[cfg(windows)]
 pub fn run_signal_handler() -> CancellationToken {
+    // TODO: implement signal handling for Windows (don't currently have a host to test on)
+    // https://docs.rs/tokio/latest/tokio/signal/windows/index.html
     CancellationToken::new().clone()
 }
 

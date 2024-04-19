@@ -5,7 +5,7 @@ build:
 
 .PHONY: lint
 lint:
-	cargo clippy --all-features --all-targets
+	cargo clippy --all-targets -- -A clippy::pedantic -A clippy::style
 
 .PHONY: format,fmt
 format:

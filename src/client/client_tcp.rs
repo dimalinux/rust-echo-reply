@@ -2,10 +2,10 @@ use std::io;
 use std::io::{BufRead, Write};
 
 fn tcp_client_loop(
-    cli_input: &mut dyn BufRead,
-    cli_output: &mut dyn Write,
-    server_read: &mut dyn BufRead,
-    server_write: &mut dyn Write,
+    cli_input: &mut dyn BufRead,   // reads command line user input
+    cli_output: &mut dyn Write,    // writes to the user's terminal
+    server_read: &mut dyn BufRead, // reads echos from the server
+    server_write: &mut dyn Write,  // writes a message to the server to be echoed
 ) -> io::Result<()> {
     let mut line = String::new();
     loop {
@@ -72,4 +72,41 @@ pub fn run_tcp_client(server_addr: std::net::SocketAddr) -> io::Result<()> {
         &mut reader,
         &mut conn,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{BufReader, BufWriter, Cursor};
+    use std::net;
+
+    #[test]
+    fn test_tcp_client_loop() {
+        let mut cli_input = BufReader::new(Cursor::new("client1\nclient2\n".as_bytes().to_vec()));
+        let mut cli_output = BufWriter::new(Vec::new());
+        let mut server_read = BufReader::new(Cursor::new("server1\nserver2\n".as_bytes().to_vec()));
+        let mut server_write = BufWriter::new(Vec::new());
+        tcp_client_loop(
+            &mut cli_input,
+            &mut cli_output,
+            &mut server_read,
+            &mut server_write,
+        )
+        .unwrap();
+        let cli_output = String::from_utf8(cli_output.into_inner().unwrap()).unwrap();
+        // While a real server echos would echo what the client sends, the client echos what the server
+        // even if it does not match.
+        assert_eq!("ECHO: server1\nECHO: server2\n", cli_output);
+    }
+
+    #[test]
+    fn test_run_tcp_client_error() {
+        // Get a free TCP port that no one will be listening on
+        let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let server_addr = listener.local_addr().unwrap();
+        drop(listener);
+
+        let err = run_tcp_client(server_addr).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::ConnectionRefused);
+    }
 }

@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::io::{BufRead, Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::SocketAddr;
 
 use log::{debug, info, warn};
@@ -17,7 +17,7 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(
     peer_name: &String,
 ) -> std::io::Result<()> {
     // TODO: Add read timeout (5 minutes?)
-    let mut reader = std::io::BufReader::new(reader);
+    let mut reader = BufReader::new(reader);
 
     loop {
         let mut line = String::new();

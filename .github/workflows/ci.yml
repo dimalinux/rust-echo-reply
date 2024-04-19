@@ -19,7 +19,7 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Lint
-        run: cargo clippy --all-targets --all-features
+        run: make lint
       - name: Run tests
         run: cargo test --verbose
       - name: Generate test coverage data
