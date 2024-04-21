@@ -63,13 +63,32 @@ fn udp_client_loop(
     Ok(())
 }
 
-pub fn run_udp_client(server_addr: std::net::SocketAddr) -> std::io::Result<()> {
+pub fn run_udp_client(
+    user_input: &mut dyn BufRead,
+    user_output: &mut dyn Write,
+    server_addr: SocketAddr,
+) -> std::io::Result<()> {
     // Get a client socket to send from on a random UDP port
     let socket = std::net::UdpSocket::bind(CLIENT_ADDR.to_string())?;
-    udp_client_loop(
-        &mut io::stdin().lock(),
-        &mut io::stdout(),
-        socket,
-        server_addr,
-    )
+    udp_client_loop(user_input, user_output, socket, server_addr)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{BufReader, BufWriter, Cursor};
+    use std::net::UdpSocket;
+
+    use super::*;
+
+    #[test]
+    fn test_run_udp_client() {
+        let server_sock = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let server_addr = server_sock.local_addr().unwrap();
+
+        // No user input, so nothing is actually sent to the server
+        let mut user_input = BufReader::new(Cursor::new("".as_bytes().to_vec()));
+        let mut user_output = BufWriter::new(Vec::new());
+
+        run_udp_client(&mut user_input, &mut user_output, server_addr).unwrap();
+    }
 }

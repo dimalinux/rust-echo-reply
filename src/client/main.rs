@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::io;
 mod client_tcp;
 use client_tcp::run_tcp_client;
 mod client_udp;
@@ -30,8 +31,14 @@ struct Cli {
 
 fn main() -> std::io::Result<()> {
     let args = Cli::parse();
+    let mut user_input = io::stdin().lock();
+    let mut user_output = io::stdout();
     match args.command {
-        Command::Udp { server_addr } => run_udp_client(server_addr),
-        Command::Tcp { server_addr } => run_tcp_client(server_addr),
+        Command::Udp { server_addr } => {
+            run_udp_client(&mut user_input, &mut user_output, server_addr)
+        }
+        Command::Tcp { server_addr } => {
+            run_tcp_client(&mut user_input, &mut user_output, server_addr)
+        }
     }
 }
