@@ -32,7 +32,7 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(
             peer_name, size, line
         );
         if !line.ends_with('\n') {
-            debug!("\nAdding newline to echo");
+            debug!("\n[Adding newline to echo]");
             line.push('\n');
         }
         writer.write_all(line.as_bytes())?;

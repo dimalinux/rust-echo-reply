@@ -26,7 +26,7 @@ async fn udp_server_receive_loop(socket: UdpSocket, run_state: CancellationToken
         let (size, from_addr) = recv_result?;
         let mut message = String::from_utf8_lossy(&buf[0..size]).to_string();
         if !message.ends_with('\n') {
-            debug!("\n[Adding newline to echo]");
+            debug!("Adding newline to echo");
             message.push('\n');
         }
         debug!(
