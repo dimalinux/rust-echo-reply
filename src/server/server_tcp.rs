@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::io::{BufRead, Read, Write};
+use std::io::{BufRead, BufReader, Read, Result, Write};
 use std::net::SocketAddr;
 
 use log::{debug, info, warn};
@@ -15,9 +15,9 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(
     reader: R,
     writer: &mut W,
     peer_name: &String,
-) -> std::io::Result<()> {
+) -> Result<()> {
     // TODO: Add read timeout (5 minutes?)
-    let mut reader = std::io::BufReader::new(reader);
+    let mut reader = BufReader::new(reader);
 
     loop {
         let mut line = String::new();
@@ -32,7 +32,7 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(
             peer_name, size, line
         );
         if !line.ends_with('\n') {
-            debug!("\nAdding newline to echo");
+            debug!("Adding newline to echo");
             line.push('\n');
         }
         writer.write_all(line.as_bytes())?;
@@ -44,7 +44,7 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(
 async fn handle_tcp_client_connections(
     listener: &mut TcpListener,
     run_state: CancellationToken,
-) -> std::io::Result<()> {
+) -> Result<()> {
     let pool = ThreadPool::new(MAX_TCP_CLIENTS);
 
     loop {

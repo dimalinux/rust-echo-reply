@@ -1,5 +1,6 @@
-use std::io;
-use std::io::{BufRead, Write};
+use std::io::Error;
+use std::io::ErrorKind::Other;
+use std::io::{BufRead, Result, Write};
 use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
 
@@ -10,7 +11,7 @@ fn udp_client_loop(
     cli_output: &mut dyn Write,
     client_sock: UdpSocket,
     server_addr: SocketAddr,
-) -> io::Result<()> {
+) -> Result<()> {
     println!("Echo destination: {} UDP", server_addr);
     println!("Enter text, newlines separate echo messages, control-d to quit.");
 
@@ -38,17 +39,19 @@ fn udp_client_loop(
             Ok(result) => result,
             Err(err) => {
                 if err.kind() == std::io::ErrorKind::WouldBlock {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "no response from server",
+                    return Err(Error::new(
+                        Other,
+                        format!("no response from {}", server_addr),
                     ));
                 }
-                return Err(err); // Or take some other recovery action
+                return Err(err);
             }
         };
+
         let mut echo = String::from_utf8_lossy(&buf[..echo_size]).to_string();
         if !echo.ends_with('\n') {
-            echo.push_str("\nNEWLINE ADDED\n");
+            _ = cli_output.write(b"NEWLINE ADDED\n")?;
+            echo.push('\n');
         }
 
         // Only include the peer address in the output if the message came from
@@ -63,13 +66,80 @@ fn udp_client_loop(
     Ok(())
 }
 
-pub fn run_udp_client(server_addr: std::net::SocketAddr) -> std::io::Result<()> {
+pub fn run_udp_client(
+    user_input: &mut dyn BufRead,
+    user_output: &mut dyn Write,
+    server_addr: SocketAddr,
+) -> Result<()> {
     // Get a client socket to send from on a random UDP port
     let socket = std::net::UdpSocket::bind(CLIENT_ADDR.to_string())?;
-    udp_client_loop(
-        &mut io::stdin().lock(),
-        &mut io::stdout(),
-        socket,
-        server_addr,
-    )
+    udp_client_loop(user_input, user_output, socket, server_addr)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{BufReader, BufWriter, Cursor};
+    use std::net::UdpSocket;
+    use std::string::String;
+    use std::thread;
+
+    use super::*;
+
+    #[test]
+    fn test_run_udp_client() {
+        let server_sock = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let server_addr = server_sock.local_addr().unwrap();
+
+        // Create a second server socket to test printing additional information
+        // when the echo comes from an address other than the one we sent to.
+        let server_sock2 = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let server_addr2 = server_sock2.local_addr().unwrap();
+
+        let mut user_input = BufReader::new(Cursor::new("client1\nclient2".as_bytes().to_vec()));
+        let mut user_output = BufWriter::new(Vec::new());
+
+        let handler = thread::spawn(move || {
+            let mut buf = [0; 1024];
+            let (len, from) = server_sock.recv_from(&mut buf).unwrap();
+            assert_eq!(
+                "client1\n",
+                String::from_utf8_lossy(&buf[..len]).to_string()
+            );
+            server_sock.send_to(b"server1\n", from).unwrap();
+            let (len, from) = server_sock.recv_from(&mut buf).unwrap();
+            assert_eq!(
+                "client2\n",
+                String::from_utf8_lossy(&buf[..len]).to_string()
+            );
+            // send the 2nd echo response from a different address
+            server_sock2.send_to(b"server2", from).unwrap();
+        });
+
+        run_udp_client(&mut user_input, &mut user_output, server_addr).unwrap();
+        let expected_output = format!(
+            "ECHO: server1\nNEWLINE ADDED\nECHO: 127.0.0.1:{} server2\n",
+            server_addr2.port()
+        );
+        assert_eq!(
+            expected_output,
+            String::from_utf8(user_output.into_inner().unwrap()).unwrap(),
+        );
+        handler.join().unwrap();
+    }
+
+    #[test]
+    fn test_run_udp_client_no_response() {
+        // Get an unused local address. We'll send an message to it, but there won't
+        // be any server to respond.
+        let server_addr = UdpSocket::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap();
+
+        let mut user_input = BufReader::new(Cursor::new("client1\n".as_bytes().to_vec()));
+        let mut user_output = BufWriter::new(Vec::new());
+
+        let err = run_udp_client(&mut user_input, &mut user_output, server_addr).unwrap_err();
+        assert_eq!(err.to_string(), format!("no response from {}", server_addr));
+    }
 }
