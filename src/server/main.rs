@@ -1,14 +1,12 @@
-use std::io::Result;
-use std::net::SocketAddr;
-use std::{env, str};
+use std::{io::Result, net::SocketAddr, str};
 
 use clap::{Parser, Subcommand};
 use log::LevelFilter;
 use tokio_util::sync::CancellationToken;
 
-use crate::server_tcp::run_tcp_server;
-use crate::server_udp::run_udp_server;
-use crate::signal_handler::run_signal_handler;
+use crate::{
+    server_tcp::run_tcp_server, server_udp::run_udp_server, signal_handler::run_signal_handler,
+};
 
 mod server_tcp;
 mod server_udp;
@@ -20,15 +18,15 @@ const BIND_ADDR: &str = "127.0.0.1:2048";
 enum Command {
     Udp {
         #[arg(short, long, default_value = BIND_ADDR)]
-        bind_addr: std::net::SocketAddr,
+        bind_addr: SocketAddr,
     },
     Tcp {
         #[arg(short, long, default_value = BIND_ADDR)]
-        bind_addr: std::net::SocketAddr,
+        bind_addr: SocketAddr,
     },
     Both {
         #[arg(short, long, default_value = BIND_ADDR)]
-        bind_addr: std::net::SocketAddr,
+        bind_addr: SocketAddr,
     },
 }
 
@@ -51,13 +49,9 @@ async fn run_both_servers(bind_addr: &SocketAddr, run_state: CancellationToken) 
 }
 
 fn init_logging() {
-    if env::var(env_logger::DEFAULT_FILTER_ENV).is_err() {
-        env::set_var(
-            env_logger::DEFAULT_FILTER_ENV,
-            LevelFilter::Trace.to_string(),
-        );
-    }
-    env_logger::init();
+    env_logger::Builder::from_default_env()
+        .filter_level(LevelFilter::Trace)
+        .init();
 }
 
 #[tokio::main]

@@ -1,6 +1,6 @@
+use std::{io, io::Result};
+
 use clap::{Parser, Subcommand};
-use std::io;
-use std::io::Result;
 
 mod client_tcp;
 use client_tcp::run_tcp_client;

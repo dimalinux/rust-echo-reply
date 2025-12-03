@@ -1,6 +1,8 @@
 use log::info;
-use tokio::select;
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::{
+    select,
+    signal::unix::{SignalKind, signal},
+};
 use tokio_util::sync::CancellationToken;
 
 #[cfg(not(windows))]
@@ -31,7 +33,7 @@ pub fn run_signal_handler() -> CancellationToken {
         }
     });
 
-    run_state_clone.clone()
+    run_state_clone
 }
 
 #[cfg(windows)]
@@ -43,10 +45,13 @@ pub fn run_signal_handler() -> CancellationToken {
 
 #[cfg(test)]
 mod tests {
-    use crate::signal_handler::run_signal_handler;
     use tokio::time::sleep;
+
+    use crate::signal_handler::run_signal_handler;
     #[cfg(not(windows))]
     #[tokio::test]
+    #[expect(unsafe_code)]
+    #[expect(clippy::cast_possible_wrap)]
     async fn test_run_signal_handler() {
         let token = run_signal_handler();
         let pid = std::process::id();

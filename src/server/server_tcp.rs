@@ -1,11 +1,12 @@
-use std::fmt::Debug;
-use std::io::{BufRead, BufReader, Read, Result, Write};
-use std::net::SocketAddr;
+use std::{
+    fmt::Debug,
+    io::{BufRead, BufReader, Read, Result, Write},
+    net::SocketAddr,
+};
 
 use log::{debug, info, warn};
 use threadpool::ThreadPool;
-use tokio::net::TcpListener;
-use tokio::select;
+use tokio::{net::TcpListener, select};
 use tokio_util::sync::CancellationToken;
 
 // max number of TCP clients that we will serve simultaneously
@@ -27,10 +28,7 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(
             Err(err) => return Err(err),
         };
 
-        info!(
-            "from: {:?} TCP, sz: {} message: {:?}",
-            peer_name, size, line
-        );
+        info!("from: {peer_name:?} TCP, sz: {size} message: {line:?}");
         if !line.ends_with('\n') {
             debug!("\n[Adding newline to echo]");
             line.push('\n');
@@ -42,7 +40,7 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(
 }
 
 async fn handle_tcp_client_connections(
-    listener: &mut TcpListener,
+    listener: &TcpListener,
     run_state: CancellationToken,
 ) -> Result<()> {
     let pool = ThreadPool::new(MAX_TCP_CLIENTS);
@@ -50,7 +48,7 @@ async fn handle_tcp_client_connections(
     loop {
         let accept_result = select! {
             biased;
-            _ = run_state.cancelled() => {
+            () = run_state.cancelled() => {
                 info!("Shutting down TCP server");
                 pool.join();
                 return Ok(());
@@ -61,58 +59,58 @@ async fn handle_tcp_client_connections(
         match accept_result {
             Ok((socket, peer)) => {
                 let peer_name = peer.to_string();
-                info!("Accepted connection from {}", peer);
+                info!("Accepted connection from {peer}");
                 pool.execute(move || {
                     // TODO: look into removing the unwrap calls
                     let mut socket = socket.into_std().unwrap();
                     socket.set_nonblocking(false).unwrap();
                     match handle_tcp_client(socket.try_clone().unwrap(), &mut socket, &peer_name) {
-                        Ok(_) => {
-                            info!("Closed connection with {}", peer_name);
+                        Ok(()) => {
+                            info!("Closed connection with {peer_name}");
                         }
                         Err(err) => {
-                            warn!("Closed connection with {} on error: {}", peer_name, err)
+                            warn!("Closed connection with {peer_name} on error: {err}");
                         }
                     }
                 });
             }
             Err(e) => {
-                warn!("client accept error: {}", e)
+                warn!("client accept error: {e}");
             }
         }
     }
 }
 
-pub async fn run_tcp_server(
-    bind_addr: &SocketAddr,
-    run_state: CancellationToken,
-) -> std::io::Result<()> {
-    let mut socket = TcpListener::bind(bind_addr).await?;
+pub async fn run_tcp_server(bind_addr: &SocketAddr, run_state: CancellationToken) -> Result<()> {
+    let socket = TcpListener::bind(bind_addr).await?;
     info!("starting UDP server on {}", socket.local_addr()?);
-    handle_tcp_client_connections(&mut socket, run_state).await
+    handle_tcp_client_connections(&socket, run_state).await
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufRead, BufWriter, Cursor, Write};
-    use std::net;
-    use std::net::{Shutdown, SocketAddr};
-    use std::string::String;
-    use std::time::Duration;
+    use std::{
+        io::{BufRead, BufWriter, Cursor, Write},
+        net,
+        net::{Shutdown, SocketAddr},
+        string::String,
+        time::Duration,
+    };
 
     use tokio::net::{TcpListener, TcpStream};
     use tokio_util::sync::CancellationToken;
 
-    use crate::init_logging;
-    use crate::server_tcp::handle_tcp_client_connections;
-    use crate::server_tcp::{handle_tcp_client, run_tcp_server};
+    use crate::{
+        init_logging,
+        server_tcp::{handle_tcp_client, handle_tcp_client_connections, run_tcp_server},
+    };
 
     #[ctor::ctor]
     fn init() {
         init_logging();
     }
 
-    /// Returns a localhost SocketAddr on a free TCP port. OSes won't
+    /// Returns a localhost `SocketAddr` on a free TCP port. OSes won't
     /// immediately recycle port numbers for security reasons when requesting an
     /// OS assigned port, so it's a safe-enough way to get a free port even when
     /// running unit tests in parallel.
@@ -147,12 +145,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_tcp_client_connections() {
-        let mut listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let run_state = CancellationToken::new();
         let run_state_clone = run_state.clone();
         let handler = tokio::spawn(async move {
-            handle_tcp_client_connections(&mut listener, run_state_clone)
+            handle_tcp_client_connections(&listener, run_state_clone)
                 .await
                 .unwrap();
         });
@@ -178,11 +176,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_tcp_client_connections_server_start_cancelled() {
-        let mut socket = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let socket = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let run_state = CancellationToken::new();
         run_state.cancel();
         // call below should immediately return with no error
-        handle_tcp_client_connections(&mut socket, run_state)
+        handle_tcp_client_connections(&socket, run_state)
             .await
             .unwrap();
     }

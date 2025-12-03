@@ -1,18 +1,18 @@
-use std::io::Error;
-use std::io::ErrorKind::Other;
-use std::io::{BufRead, Result, Write};
-use std::net::{SocketAddr, UdpSocket};
-use std::time::Duration;
+use std::{
+    io::{BufRead, Error, ErrorKind::Other, Result, Write},
+    net::{SocketAddr, UdpSocket},
+    time::Duration,
+};
 
 use crate::{CLIENT_ADDR, MAX_BUF_SZ};
 
 fn udp_client_loop(
     cli_input: &mut dyn BufRead,
     cli_output: &mut dyn Write,
-    client_sock: UdpSocket,
+    client_sock: &UdpSocket,
     server_addr: SocketAddr,
 ) -> Result<()> {
-    println!("Echo destination: {} UDP", server_addr);
+    println!("Echo destination: {server_addr} UDP");
     println!("Enter text, newlines separate echo messages, control-d to quit.");
 
     loop {
@@ -39,10 +39,7 @@ fn udp_client_loop(
             Ok(result) => result,
             Err(err) => {
                 if err.kind() == std::io::ErrorKind::WouldBlock {
-                    return Err(Error::new(
-                        Other,
-                        format!("no response from {}", server_addr),
-                    ));
+                    return Err(Error::new(Other, format!("no response from {server_addr}")));
                 }
                 return Err(err);
             }
@@ -61,7 +58,7 @@ fn udp_client_loop(
             peer_name = from.to_string();
             peer_name.push(' ');
         }
-        cli_output.write_fmt(format_args!("ECHO: {}{}", peer_name, echo))?;
+        cli_output.write_fmt(format_args!("ECHO: {peer_name}{echo}"))?;
     }
     Ok(())
 }
@@ -73,15 +70,17 @@ pub fn run_udp_client(
 ) -> Result<()> {
     // Get a client socket to send from on a random UDP port
     let socket = std::net::UdpSocket::bind(CLIENT_ADDR.to_string())?;
-    udp_client_loop(user_input, user_output, socket, server_addr)
+    udp_client_loop(user_input, user_output, &socket, server_addr)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufReader, BufWriter, Cursor};
-    use std::net::UdpSocket;
-    use std::string::String;
-    use std::thread;
+    use std::{
+        io::{BufReader, BufWriter, Cursor},
+        net::UdpSocket,
+        string::String,
+        thread,
+    };
 
     use super::*;
 
@@ -95,7 +94,7 @@ mod tests {
         let server_sock2 = UdpSocket::bind("127.0.0.1:0").unwrap();
         let server_addr2 = server_sock2.local_addr().unwrap();
 
-        let mut user_input = BufReader::new(Cursor::new("client1\nclient2".as_bytes().to_vec()));
+        let mut user_input = BufReader::new(Cursor::new(b"client1\nclient2".to_vec()));
         let mut user_output = BufWriter::new(Vec::new());
 
         let handler = thread::spawn(move || {
@@ -136,10 +135,10 @@ mod tests {
             .local_addr()
             .unwrap();
 
-        let mut user_input = BufReader::new(Cursor::new("client1\n".as_bytes().to_vec()));
+        let mut user_input = BufReader::new(Cursor::new(b"client1\n".to_vec()));
         let mut user_output = BufWriter::new(Vec::new());
 
         let err = run_udp_client(&mut user_input, &mut user_output, server_addr).unwrap_err();
-        assert_eq!(err.to_string(), format!("no response from {}", server_addr));
+        assert_eq!(err.to_string(), format!("no response from {server_addr}"));
     }
 }

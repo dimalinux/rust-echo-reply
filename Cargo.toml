@@ -1,27 +1,44 @@
 [package]
 name = "echo-client-and-server"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version = "0.2.0"
+edition = "2024"
+description = "TCP and UDP echo client and server"
+license-file = "LICENSE"
+repository = "https://github.com/dimalinux/rust-echo-reply"
+keywords = ["echo", "tcp", "udp", "server", "client"]
+categories = ["network-programming"]
 
 [[bin]]
-name = "server"
+name = "echo-server"
 path = "src/server/main.rs"
 
 [[bin]]
-name = "client"
+name = "echo-client"
 path = "src/client/main.rs"
 
+[lints.rust]
+unsafe_code = "warn"
+unused_must_use = "deny"
+
+[lints.clippy]
+# Deny these clippy lints
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+
+# Allow some pedantic lints that are too noisy or don't apply
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+missing_docs_in_private_items = "allow"
 
 [dependencies]
-clap = { version = "4.5.2", features = ["derive", "string"] }
-nix = "0.28.0"
-threadpool = "1.8.1"
-log = "0.4.21"
-env_logger = "0.11.3"
-ctor = "0.2.7"
-tokio = { version = "1.37.0", features = ["rt", "rt-multi-thread", "macros", "sync", "signal", "signal-hook-registry", "net", "time"] }
-futures = "0.3.30"
-tokio-util = "0.7.10"
-libc = "0.2.153"
+clap = { version = "4.5", features = ["derive", "string"] }
+threadpool = "1.8"
+log = "0.4"
+env_logger = "0.11"
+ctor = "0.6"
+tokio = { version = "1.48", features = ["rt", "rt-multi-thread", "macros", "sync", "signal", "signal-hook-registry", "net", "time"] }
+tokio-util = "0.7"
+libc = "0.2"

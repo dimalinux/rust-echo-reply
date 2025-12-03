@@ -2,9 +2,13 @@ name: rust-echo-reply
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -12,18 +16,26 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Build
         run: cargo build --verbose
+
       - name: Check formatting
         run: cargo fmt --all -- --check
+
       - name: Lint
-        run: make lint
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
       - name: Run tests
         run: cargo test --verbose
+
       - name: Generate test coverage data
-        run:  make coverage
+        run: make coverage
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4
         with:

@@ -1,0 +1,6 @@
+# Use: cargo +nightly fmt
+group_imports = "StdExternalCrate"
+reorder_imports = true
+reorder_modules = true # default
+reorder_impl_items = true
+imports_granularity = "crate"

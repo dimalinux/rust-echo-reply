@@ -1,6 +1,8 @@
-use std::io;
-use std::io::{BufRead, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::{
+    io,
+    io::{BufRead, Write},
+    net::{SocketAddr, TcpStream},
+};
 
 fn tcp_client_loop(
     user_input: &mut dyn BufRead,  // reads command line user input
@@ -30,7 +32,7 @@ fn tcp_client_loop(
             echo_line.push('\n');
         }
 
-        user_output.write_all(format!("ECHO: {}", echo_line).as_bytes())?;
+        user_output.write_all(format!("ECHO: {echo_line}").as_bytes())?;
     }
     Ok(())
 }
@@ -44,7 +46,7 @@ pub fn run_tcp_client(
     let mut conn = match TcpStream::connect(server_addr) {
         Ok(result) => result,
         Err(err) => {
-            eprintln!("Error connecting to {:?}: {}\n", server_addr, err);
+            eprintln!("Error connecting to {server_addr:?}: {err}\n");
             return Err(err); // Or take some other recovery action
         }
     };
@@ -53,25 +55,27 @@ pub fn run_tcp_client(
     let unbuf_reader = conn.try_clone()?;
     let mut reader = io::BufReader::new(unbuf_reader);
 
-    println!("Connected to {} TCP", peer_addr);
+    println!("Connected to {peer_addr} TCP");
     println!("Enter text, newlines separate echo messages, control-d to quit.");
     tcp_client_loop(user_input, user_output, &mut reader, &mut conn)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::ErrorKind::ConnectionRefused;
-    use std::io::{BufReader, BufWriter, Cursor};
-    use std::net::TcpListener;
-    use std::{net, thread};
+    use std::{
+        io::{BufReader, BufWriter, Cursor, ErrorKind::ConnectionRefused},
+        net,
+        net::TcpListener,
+        thread,
+    };
 
     use super::*;
 
     #[test]
     fn test_tcp_client_loop() {
-        let mut user_input = BufReader::new(Cursor::new("client1\nclient2".as_bytes().to_vec()));
+        let mut user_input = BufReader::new(Cursor::new(b"client1\nclient2".to_vec()));
         let mut user_output = BufWriter::new(Vec::new());
-        let mut server_read = BufReader::new(Cursor::new("server1\nserver2".as_bytes().to_vec()));
+        let mut server_read = BufReader::new(Cursor::new(b"server1\nserver2".to_vec()));
         let mut server_write = BufWriter::new(Vec::new());
         tcp_client_loop(
             &mut user_input,
@@ -97,7 +101,7 @@ mod tests {
             drop(listener);
         });
 
-        let mut user_input = BufReader::new(Cursor::new("".as_bytes().to_vec()));
+        let mut user_input = BufReader::new(Cursor::new(b"".to_vec()));
         let mut user_output = BufWriter::new(Vec::new());
 
         run_tcp_client(&mut user_input, &mut user_output, server_addr).unwrap();
@@ -111,7 +115,7 @@ mod tests {
         let server_addr = listener.local_addr().unwrap();
         drop(listener);
 
-        let mut user_input = BufReader::new(Cursor::new("".as_bytes().to_vec()));
+        let mut user_input = BufReader::new(Cursor::new(b"".to_vec()));
         let mut user_output = BufWriter::new(Vec::new());
 
         let err = run_tcp_client(&mut user_input, &mut user_output, server_addr).unwrap_err();

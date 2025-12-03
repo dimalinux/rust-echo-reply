@@ -1,9 +1,7 @@
-use std::io::Result;
-use std::net::SocketAddr;
+use std::{io::Result, net::SocketAddr};
 
 use log::{debug, info};
-use tokio::net::UdpSocket;
-use tokio::select;
+use tokio::{net::UdpSocket, select};
 use tokio_util::sync::CancellationToken;
 
 // UDP source addresses can be forged. We want to limit the packet
@@ -16,7 +14,7 @@ async fn udp_server_receive_loop(socket: UdpSocket, run_state: CancellationToken
     loop {
         let recv_result = select! {
             biased;
-            _ = run_state.cancelled() => {
+            () = run_state.cancelled() => {
                 // Shutdown message received, exit even if we are blocked on the
                 // recv_from call below.
                 return Ok(());
@@ -35,7 +33,7 @@ async fn udp_server_receive_loop(socket: UdpSocket, run_state: CancellationToken
             &message[0..message.len() - 1]
         );
         let amt = socket.send_to(message.as_bytes(), from_addr).await?;
-        debug!("sent {} bytes", amt);
+        debug!("sent {amt} bytes");
     }
 }
 
@@ -49,13 +47,12 @@ pub async fn run_udp_server(bind_addr: &SocketAddr, run_state: CancellationToken
 mod tests {
     use std::net::SocketAddr;
 
-    use tokio::net::UdpSocket;
-    use tokio::time::sleep;
+    use tokio::{net::UdpSocket, time::sleep};
     use tokio_util::sync::CancellationToken;
 
     use crate::server_udp::{run_udp_server, udp_server_receive_loop};
 
-    /// Returns a localhost SocketAddr on a free UDP port. OSes won't
+    /// Returns a localhost `SocketAddr` on a free UDP port. OSes won't
     /// immediately recycle port numbers for security reasons when requesting an
     /// OS assigned port, so it's a safe-enough way to get a free port even when
     /// running unit tests in parallel.
@@ -70,7 +67,7 @@ mod tests {
         let socket = get_free_udp_addr();
         let run_state = CancellationToken::new();
         run_state.cancel();
-        run_udp_server(&socket, run_state).await.unwrap()
+        run_udp_server(&socket, run_state).await.unwrap();
     }
 
     #[tokio::test]
@@ -84,7 +81,7 @@ mod tests {
         let handler = tokio::spawn(async move {
             udp_server_receive_loop(server_sock, run_state_clone)
                 .await
-                .unwrap()
+                .unwrap();
         });
 
         let client_sock = UdpSocket::bind("127.0.0.1:0").await.unwrap();
