@@ -32,7 +32,8 @@ fn handle_tcp_client<R: Read, W: Write + Debug>(
             Err(err) => {
                 // If the read timed out, loop back to check cancellation
                 if err.kind() == std::io::ErrorKind::WouldBlock
-                    || err.kind() == std::io::ErrorKind::TimedOut {
+                    || err.kind() == std::io::ErrorKind::TimedOut
+                {
                     continue;
                 }
                 return Err(err);
@@ -72,11 +73,17 @@ async fn handle_tcp_client_connections(
                     let mut socket = socket.into_std().unwrap();
                     socket.set_nonblocking(false).unwrap();
                     // Set a read timeout so we can periodically check for shutdown
-                    if let Err(e) = socket.set_read_timeout(Some(std::time::Duration::from_secs(1))) {
+                    if let Err(e) = socket.set_read_timeout(Some(std::time::Duration::from_secs(1)))
+                    {
                         warn!("Failed to set read timeout for {peer_name}: {e}");
                         return;
                     }
-                    match handle_tcp_client(socket.try_clone().unwrap(), &mut socket, &peer_name, &run_state_clone) {
+                    match handle_tcp_client(
+                        socket.try_clone().unwrap(),
+                        &mut socket,
+                        &peer_name,
+                        &run_state_clone,
+                    ) {
                         Ok(()) => {
                             info!("Closed connection with {peer_name}");
                         }
@@ -255,12 +262,12 @@ mod tests {
 
         // The server should shut down within a reasonable time (2 seconds max)
         // even though the client is still connected but idle
-        let result = tokio::time::timeout(
-            Duration::from_secs(2),
-            handler
-        ).await;
+        let result = tokio::time::timeout(Duration::from_secs(2), handler).await;
 
-        assert!(result.is_ok(), "Server should shut down within 2 seconds even with idle connection");
+        assert!(
+            result.is_ok(),
+            "Server should shut down within 2 seconds even with idle connection"
+        );
         assert!(result.unwrap().is_ok(), "Server should shut down cleanly");
     }
 }
