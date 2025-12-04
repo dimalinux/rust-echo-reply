@@ -2,17 +2,6 @@
 
 TCP and UDP echo server and client implementation written in Rust.
 
-## Installation
-
-### Install from GitHub
-
-```
-cargo install --git https://github.com/dimalinux/rust-echo-reply
-```
-
-### Install from Local Source
-
-```
 git clone https://github.com/dimalinux/rust-echo-reply
 cd rust-echo-reply
 cargo install --path .
@@ -70,3 +59,13 @@ level is `info`. For more verbose output, set it to `trace`.
 # Trace-level logging (verbose)
 RUST_LOG=trace echo-server both
 ```
+
+## Security Note
+
+UDP servers can be exploited for reflection attacks where a client spoofs its
+source IP with a victim's IP, causing the server to send responses to the victim.
+Example code: https://github.com/dimalinux/spoofsourceip
+
+This UDP server has no amplification (output size equals input size) and caps
+packets at 2048 bytes, limiting the risk. That said, avoid running a UDP echo
+server on a public IP as a long-term service.
