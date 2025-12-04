@@ -1,10 +1,10 @@
 use std::{
     fmt::Debug,
-    io::{BufRead, BufReader, Read, Result, Write},
+    io::{Read, Result, Write},
     net::SocketAddr,
 };
 
-use log::{debug, info, warn};
+use log::{info, warn};
 use threadpool::ThreadPool;
 use tokio::{net::TcpListener, select};
 use tokio_util::sync::CancellationToken;
@@ -13,29 +13,22 @@ use tokio_util::sync::CancellationToken;
 const MAX_TCP_CLIENTS: usize = 100;
 
 fn handle_tcp_client<R: Read, W: Write + Debug>(
-    reader: R,
+    mut reader: R,
     writer: &mut W,
     peer_name: &String,
 ) -> Result<()> {
-    // TODO: Add read timeout (5 minutes?)
-    let mut reader = BufReader::new(reader);
-
+    // TODO: Add a timeout to close idle connections?
+    let mut buf = [0u8; 4096];
     loop {
-        let mut line = String::new();
-        let size = match reader.read_line(&mut line) {
+        let size = match reader.read(&mut buf) {
             Ok(0) => return Ok(()),
-            Ok(result) => result,
+            Ok(n) => n,
             Err(err) => return Err(err),
         };
-
-        info!("from: {peer_name:?} TCP, sz: {size} message: {line:?}");
-        if !line.ends_with('\n') {
-            debug!("\n[Adding newline to echo]");
-            line.push('\n');
-        }
-        writer.write_all(line.as_bytes())?;
+        info!("received: {peer_name} TCP, bytes: {size}");
+        writer.write_all(&buf[..size])?;
         writer.flush()?;
-        info!("sent {} bytes\n{:?}", line.len(), writer);
+        info!("sent: {peer_name} TCP, bytes: {size}");
     }
 }
 
@@ -83,7 +76,7 @@ async fn handle_tcp_client_connections(
 
 pub async fn run_tcp_server(bind_addr: &SocketAddr, run_state: CancellationToken) -> Result<()> {
     let socket = TcpListener::bind(bind_addr).await?;
-    info!("starting UDP server on {}", socket.local_addr()?);
+    info!("starting TCP server on {}", socket.local_addr()?);
     handle_tcp_client_connections(&socket, run_state).await
 }
 
@@ -127,20 +120,20 @@ mod tests {
         let peer_name = std::string::String::from("127.0.0.1:1024");
         handle_tcp_client(reader, &mut writer, &peer_name).unwrap();
         let output = String::from_utf8(writer.into_inner().unwrap()).unwrap();
-        let expected_output = input.to_string() + "\n";
+        let expected_output = input.to_string();
         assert_eq!(expected_output, output);
     }
 
     #[tokio::test]
-    async fn test_handle_tcp_client_non_utf8_input() {
-        let invalid_utf8: &[u8] = &[0xC0, 0x80];
-        let reader = Cursor::new(invalid_utf8);
+    async fn test_handle_tcp_client_binary_input() {
+        // Verify that arbitrary binary data is echoed unchanged.
+        let input: &[u8] = &[0x00, 0xFF, 0x10, 0x20];
+        let reader = Cursor::new(input.to_vec());
         let mut writer = BufWriter::new(Vec::new());
         let peer_name = String::from("127.0.0.1:1024");
-        let err = handle_tcp_client(reader, &mut writer, &peer_name).err();
-        assert_eq!(err.unwrap().kind(), std::io::ErrorKind::InvalidData);
-        let output = String::from_utf8(writer.into_inner().unwrap()).unwrap();
-        assert_eq!("", output);
+        handle_tcp_client(reader, &mut writer, &peer_name).unwrap();
+        let output = writer.into_inner().unwrap();
+        assert_eq!(input, output.as_slice());
     }
 
     #[tokio::test]

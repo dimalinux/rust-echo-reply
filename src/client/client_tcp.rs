@@ -4,6 +4,12 @@ use std::{
     net::{SocketAddr, TcpStream},
 };
 
+fn intro_message(peer_addr: SocketAddr) -> String {
+    format!(
+        "Connected to {peer_addr} TCP\nEnter text, newlines separate echo messages, control-d to quit.\n",
+    )
+}
+
 fn tcp_client_loop(
     user_input: &mut dyn BufRead,  // reads command line user input
     user_output: &mut dyn Write,   // writes to the user's terminal
@@ -16,19 +22,15 @@ fn tcp_client_loop(
         if n == 0 {
             break;
         }
-        if !user_line.ends_with('\n') {
-            println!("\n[Adding newline to echo]");
-            user_line.push('\n');
-        }
 
         server_write.write_all(user_line.as_bytes())?;
-        server_write.flush().unwrap();
+        server_write.flush()?;
 
         let mut echo_line = String::new();
         _ = server_read.read_line(&mut echo_line)?;
 
         if !echo_line.ends_with('\n') {
-            println!("\n[Adding newline to echo]");
+            user_output.write_all(b"[Adding newline to echo]\n")?;
             echo_line.push('\n');
         }
 
@@ -55,8 +57,7 @@ pub fn run_tcp_client(
     let unbuf_reader = conn.try_clone()?;
     let mut reader = io::BufReader::new(unbuf_reader);
 
-    println!("Connected to {peer_addr} TCP");
-    println!("Enter text, newlines separate echo messages, control-d to quit.");
+    user_output.write_all(intro_message(peer_addr).as_bytes())?;
     tcp_client_loop(user_input, user_output, &mut reader, &mut conn)
 }
 
@@ -87,7 +88,8 @@ mod tests {
         let cli_output = String::from_utf8(user_output.into_inner().unwrap()).unwrap();
         // While a real server echos would echo what the client sends, the client echos what the server
         // even if it does not match.
-        assert_eq!("ECHO: server1\nECHO: server2\n", cli_output);
+        let expected = "ECHO: server1\n[Adding newline to echo]\nECHO: server2\n";
+        assert_eq!(expected, cli_output);
     }
 
     #[test]

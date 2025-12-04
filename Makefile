@@ -7,6 +7,10 @@ build:
 lint:
 	cargo clippy --all-targets --all-features
 
+.PHONY: lint-fix
+lint-fix:
+	cargo clippy --all-targets --all-features --fix --allow-dirty --allow-staged
+
 .PHONY: fmt
 fmt:
 	cargo +nightly fmt

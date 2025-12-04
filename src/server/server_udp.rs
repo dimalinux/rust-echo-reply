@@ -22,18 +22,10 @@ async fn udp_server_receive_loop(socket: UdpSocket, run_state: CancellationToken
             result = socket.recv_from(&mut buf) => result,
         };
         let (size, from_addr) = recv_result?;
-        let mut message = String::from_utf8_lossy(&buf[0..size]).to_string();
-        if !message.ends_with('\n') {
-            debug!("Adding newline to echo");
-            message.push('\n');
-        }
-        debug!(
-            "from: {} UDP, message: {}",
-            from_addr,
-            &message[0..message.len() - 1]
-        );
-        let amt = socket.send_to(message.as_bytes(), from_addr).await?;
-        debug!("sent {amt} bytes");
+        debug!("received: {from_addr} UDP, bytes: {size}");
+
+        let amt = socket.send_to(&buf[..size], from_addr).await?;
+        debug!("sent: {from_addr} UDP, bytes: {amt}");
     }
 }
 
